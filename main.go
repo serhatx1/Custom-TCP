@@ -1,25 +1,59 @@
 package main
 
 import (
-  "fmt"
+	"fmt"
+	"net"
 )
 
-//TIP To run your code, right-click the code and select <b>Run</b>. Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.
-
-func main() {
-  //TIP Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined or highlighted text
-  // to see how GoLand suggests fixing it.
-  s := "gopher"
-  fmt.Println("Hello and welcome, %s!", s)
-
-  for i := 1; i <= 5; i++ {
-	//TIP You can try debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-	// for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>. To start your debugging session, 
-	// right-click your code in the editor and select the <b>Debug</b> option. 
-	fmt.Println("i =", 100/i)
-  }
+type Server struct {
+	listenAddr string
+	ln         net.Listener
+	quitch     chan struct{}
 }
 
-//TIP See GoLand help at <a href="https://www.jetbrains.com/help/go/">jetbrains.com/help/go/</a>.
-// Also, you can try interactive lessons for GoLand by selecting 'Help | Learn IDE Features' from the main menu.
+func NewServer(listenAddr string) *Server {
+	return &Server{
+		listenAddr: listenAddr,
+		quitch:     make(chan struct{}),
+	}
+}
+func (s *Server) Start() error {
+	ln, err := net.Listen("tcp", s.listenAddr)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	s.ln = ln
+	go s.AcceptLoop()
+	<-s.quitch
+
+	return nil
+}
+
+func (s *Server) AcceptLoop() error {
+	for {
+		conn, err := s.ln.Accept()
+		if err != nil {
+			fmt.Println("error", err)
+			continue
+		}
+		go s.ReadLoop(conn)
+	}
+}
+func (s *Server) ReadLoop(conn net.Conn) {
+	defer conn.Close()
+	buf := make([]byte, 2048)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			fmt.Println("error", err)
+			continue
+		}
+		msg := buf[:n]
+		fmt.Println("msg", string(msg))
+	}
+}
+func main() {
+	server := NewServer(":3000")
+	server.Start()
+}
